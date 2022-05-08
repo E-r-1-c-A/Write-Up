@@ -1,0 +1,3 @@
+# 構建 ROP Chain
+# (1) 用 r2 靜態分析 找到 sym.imp.system (0x08048320)
+# (2) 用 rabin2 輸出字串 找到 '/bin/sh' (0x0804a024)
